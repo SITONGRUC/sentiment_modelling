@@ -16,3 +16,9 @@ The dataset used.
 
 # Reference 
 Ke, Zheng and Kelly, Bryan T. and Xiu, Dacheng, Predicting Returns with Text Data (July 30, 2019). University of Chicago, Becker Friedman Institute for Economics Working Paper No. 2019-69; Yale ICF Working Paper No. 2019-10. Available at SSRN: https://ssrn.com/abstract=3389884
+
+This is from https://github.com/mrepetto94/sentiment_modelling
+Since the old repo is from 2021(I'm not sure)
+some packages used in the old repo can't work or could go to error. 
+I fix the problem ( which is in the module beautifultools.py) 
+

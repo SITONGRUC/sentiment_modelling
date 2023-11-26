@@ -565,7 +565,7 @@ class SSESTM(BaseEstimator):
         coef[wordfreq < self.kappa] = np.nan
 
         self.marginal_screening = pd.DataFrame(
-            ({"term": cvStep1.get_feature_names(), "score": coef})
+            ({"term": cvStep1.get_feature_names_out(), "score": coef})
         ).dropna()
 
         # TOPIC MODELLING #
@@ -588,15 +588,18 @@ class SSESTM(BaseEstimator):
         # Compute count of sentiment charged words for each web-page
         s = X.apply(lambda row: len(row.split(" ")))
 
+
         # Create document keyword matrix
         cvStep2 = CountVectorizer(vocabulary=self.marginal_screening["term"].to_list())
         dS = cvStep2.fit_transform(X)
 
         # Get sentiment word frequency per document
-        tildeD = dS / s[:, None]
+        tildeD = dS/s.values.reshape(len(s),1)
+        
 
         # Fit the linear regression to estimate O matrix
-        O = LinearRegression(fit_intercept=False).fit(X=W, y=tildeD).coef_
+        O = LinearRegression(fit_intercept=False).fit(X = np.asarray(W),
+                                                y=tildeD.toarray()).coef_
 
         # Set negative coefficients to 0
         O[O <= 0] = 0
@@ -607,6 +610,67 @@ class SSESTM(BaseEstimator):
         self.topic_coefficients = O
 
         return self
+    def transform(self,X):
+        def mle(x, s, dS, O):
+            """ The function implements the log-likelihood of a 
+            multinomial with penalty as posed by Kelly et al.
+
+
+            Parameters
+            ----------
+            x : float
+                the sentiment score
+
+            s : int
+                the number of sentiment charged words per web-page
+
+            dS : pandas series
+                a series containing sentiment charged words frequencies
+            
+            O : array-like
+                Matrix containing word positiveness or negativeness.
+                
+
+            Returns
+            -------
+            v : float
+                Return the log-likelihood value given x
+            """
+            return -(
+                (float(s) ** (-1))
+                * np.sum(
+                    np.multiply(
+                        dS.toarray().T,
+                        (np.log(0.00000001 + x * O[:, 0] + (1 - x) * O[:, 1]))[:, None],
+                    )
+                    + self.l * np.log(x * (1 - x))
+                )
+            )
+        X = X.apply(
+            drop_non_sentiment_words,
+            sentiment_words=self.marginal_screening["term"].to_list(),
+        )
+
+        # Compute count of sentiment charged words for the web-page
+        s = X.apply(lambda row: len(row.split(" ")))
+
+        # Create document keyword matrix
+        cvStep3 = CountVectorizer(vocabulary=self.marginal_screening["term"].to_list())
+        dS = cvStep3.fit_transform(X)
+        D = dS / s.to_numpy()[:, None]
+        p = []
+        for i in range(len(s)):
+            p.append(
+                fminbound(
+                    mle,
+                    x1=0.001,
+                    x2=0.999,
+                    args=(s.iloc[i], dS[i, :], self.topic_coefficients),
+                )
+            )
+        return dS
+
+
 
     def predict(self, X):
         """The function implements scoring on new set of keywords as 
@@ -624,6 +688,7 @@ class SSESTM(BaseEstimator):
 
 
         """
+
 
         def mle(x, s, dS, O):
             """ The function implements the log-likelihood of a 
@@ -661,6 +726,8 @@ class SSESTM(BaseEstimator):
                 )
             )
 
+
+
         # Create a column with only sentiment charged keywords
         X = X.apply(
             drop_non_sentiment_words,
@@ -675,7 +742,7 @@ class SSESTM(BaseEstimator):
         dS = cvStep3.fit_transform(X)
 
         # Get sentiment word frequency per document
-        D = dS / s[:, None]
+        D = dS / s.to_numpy()[:, None]
 
         p = []
         for i in range(len(s)):
@@ -823,3 +890,21 @@ class testData:
             )
 
         return dante
+# Below is where I try to use this module to some finance data. 
+# please just soverlook it. 
+class findata:
+    def get_data(path="",lenth = 500):
+        data = pd.read_csv(path)
+        data = data.rename(columns = {'title':'content'})
+        data.loc[:, "content"] = data.loc[:, "content"].apply(
+                lambda x: " ".join(
+                    [
+                        w
+                        for w in nltk.word_tokenize(x)
+                        if not w in stopwords.words("english") and len(w) > 2
+                    ]
+                )
+        )
+        return data
+        
+
